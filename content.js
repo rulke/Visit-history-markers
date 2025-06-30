@@ -24,6 +24,7 @@
   let isCurrentlyVisible = true; // 当前标记是否可见
   let floatButton = null; // 悬浮控制按钮
   let isPageMarkingEnabled = true; // 当前页面是否允许新标记
+  let pageDisableTime = 0; // 页面禁用的时间戳
   
   // 自定义样式ID
   const STYLE_ID = 'visited-links-marker-style';
@@ -33,12 +34,18 @@
     return `page_marking:${window.location.href}`;
   }
   
+  // 获取页面禁用时间的存储键
+  function getPageDisableTimeKey() {
+    return `page_disable_time:${window.location.href}`;
+  }
+  
   // 检查当前页面标记状态
   function checkPageMarkingState() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(getCurrentPageKey(), function(result) {
-        // 默认启用标记
-        resolve(result[getCurrentPageKey()] !== false);
+      chrome.storage.local.get([getCurrentPageKey(), getPageDisableTimeKey()], function(result) {
+        isPageMarkingEnabled = result[getCurrentPageKey()] !== false;
+        pageDisableTime = result[getPageDisableTimeKey()] || 0;
+        resolve(isPageMarkingEnabled);
       });
     });
   }
@@ -47,8 +54,16 @@
   function setPageMarkingState(enabled) {
     const data = {};
     data[getCurrentPageKey()] = enabled;
+    if (!enabled) {
+      // 如果是禁用操作，记录禁用时间
+      data[getPageDisableTimeKey()] = Date.now();
+    } else {
+      // 如果是启用操作，清除禁用时间
+      data[getPageDisableTimeKey()] = 0;
+    }
     chrome.storage.local.set(data);
     isPageMarkingEnabled = enabled;
+    pageDisableTime = enabled ? 0 : Date.now();
   }
   
   // 初始化
@@ -63,9 +78,7 @@
       }
       
       // 检查页面标记状态
-      checkPageMarkingState().then(enabled => {
-        isPageMarkingEnabled = enabled;
-        
+      checkPageMarkingState().then(() => {
         // 加载访问历史
         loadVisitedLinks().then(() => {
           // 标记当前页面上的链接
@@ -138,6 +151,9 @@
   function markVisitedLinksOnPage() {
     if (!settings.enabled || !settings.showCurrentPage) return;
     
+    // 只在启用状态下标记链接
+    if (!isPageMarkingEnabled) return;
+    
     const links = document.querySelectorAll('a[href]');
     links.forEach(link => {
       processLink(link);
@@ -155,11 +171,20 @@
     
     // 检查是否访问过
     if (visitedLinks.has(url)) {
+      const visitTime = visitedLinks.get(url);
+      
+      // 如果有禁用时间记录，检查访问时间是否在禁用期间
+      if (pageDisableTime > 0) {
+        // 如果访问时间在禁用期间，不显示标记
+        if (visitTime > pageDisableTime) {
+          return;
+        }
+      }
+      
       // 添加到已处理集合
       markApplied.add(link);
-      
       // 应用标记
-      applyMarkStyle(link, visitedLinks.get(url));
+      applyMarkStyle(link, visitTime);
     }
   }
   
@@ -454,7 +479,7 @@
         break;
         
       case 'forceMarkLink':
-        // 强制标记特定链接
+        // 强制标记特定链接（即使页面禁用了标记也允许）
         if (message.url) {
           const links = document.querySelectorAll(`a[href="${message.url}"]`);
           links.forEach(link => {
@@ -486,12 +511,15 @@
       case 'disablePage':
         // 禁用当前页面的新标记
         setPageMarkingState(false);
-        showNotification('已禁用此页面的新标记');
+        showNotification('已禁用此页面的新标记（已有标记保持不变）');
         break;
         
       case 'enablePage':
         // 启用当前页面的标记
         setPageMarkingState(true);
+        // 重新标记所有链接
+        markApplied.clear();
+        markVisitedLinksOnPage();
         showNotification('已启用此页面的标记');
         break;
         
@@ -549,24 +577,11 @@
     }
   }
   
-  // 记录链接点击
-  document.addEventListener('click', function(e) {
-    if (!isPageMarkingEnabled) return; // 如果页面禁用了标记，不记录新的访问
-    
-    // 检查点击的是否是链接
-    let target = e.target;
-    while (target && target !== document.body) {
-      if (target.tagName === 'A' && target.href && target.href.startsWith('http')) {
-        // 记录访问
-        registerLinkVisit(target.href);
-        break;
-      }
-      target = target.parentNode;
-    }
-  }, true);
-  
-  // 注册链接访问
+  // 记录链接访问
   function registerLinkVisit(url) {
+    // 如果页面禁用了标记，不记录新的访问
+    if (!isPageMarkingEnabled) return;
+
     const now = Date.now();
     
     // 更新内存中的访问记录
@@ -755,16 +770,16 @@
   // 监听页面可见性变化
   document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') {
-      // 检查页面标记状态
-      checkPageMarkingState().then(enabled => {
-        isPageMarkingEnabled = enabled;
-        
+      // 检查页面标记状态和禁用时间
+      checkPageMarkingState().then(() => {
         // 重新加载访问历史并更新标记
         loadVisitedLinks().then(() => {
           // 清除已处理的标记集合，以允许重新处理所有链接
           markApplied.clear();
           // 重新标记所有链接
-          markVisitedLinksOnPage();
+          if (isPageMarkingEnabled) {
+            markVisitedLinksOnPage();
+          }
         });
       });
     }
@@ -772,17 +787,33 @@
 
   // 监听浏览器后退/前进
   window.addEventListener('popstate', function() {
-    // 检查页面标记状态
-    checkPageMarkingState().then(enabled => {
-      isPageMarkingEnabled = enabled;
-      
+    // 检查页面标记状态和禁用时间
+    checkPageMarkingState().then(() => {
       // 重新加载访问历史并更新标记
       loadVisitedLinks().then(() => {
         // 清除已处理的标记集合，以允许重新处理所有链接
         markApplied.clear();
         // 重新标记所有链接
-        markVisitedLinksOnPage();
+        if (isPageMarkingEnabled) {
+          markVisitedLinksOnPage();
+        }
       });
     });
   });
+
+  // 监听链接点击
+  document.addEventListener('click', function(e) {
+    // 检查点击的是否是链接
+    let target = e.target;
+    while (target && target !== document.body) {
+      if (target.tagName === 'A' && target.href && target.href.startsWith('http')) {
+        // 只有在页面启用标记时才记录访问
+        if (isPageMarkingEnabled) {
+          registerLinkVisit(target.href);
+        }
+        break;
+      }
+      target = target.parentNode;
+    }
+  }, true);
 })(); 
