@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>访问历史标记</title>
+  <link rel="stylesheet" href="css/popup.css">
+</head>
+<body>
+  <div class="header">
+    <h1>访问历史标记</h1>
+    <button id="settingsBtn" title="设置">⚙️</button>
+  </div>
+
+  <div class="container">
+    <div class="option">
+      <label class="switch">
+        <input type="checkbox" id="enableExtension" checked>
+        <span class="slider round"></span>
+      </label>
+      <span class="option-text">启用插件</span>
+    </div>
+
+    <div class="section">
+      <h2>标记样式</h2>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="markStyle" value="border" checked>
+          <span>边框</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="markStyle" value="background">
+          <span>背景高亮</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="markStyle" value="underline">
+          <span>下划线</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>颜色设置</h2>
+      <div class="color-option">
+        <span>最近访问 (1小时内):</span>
+        <input type="color" id="recentColor" value="#FF0000">
+      </div>
+      <div class="color-option">
+        <span>今日访问:</span>
+        <input type="color" id="todayColor" value="#FFA500">
+      </div>
+      <div class="color-option">
+        <span>更早访问:</span>
+        <input type="color" id="earlierColor" value="#90EE90">
+      </div>
+    </div>
+
+    <div class="option">
+      <label class="switch">
+        <input type="checkbox" id="showCurrentPage" checked>
+        <span class="slider round"></span>
+      </label>
+      <span class="option-text">当前页面显示标记</span>
+    </div>
+
+    <div class="button-group">
+      <button id="resetBtn">恢复默认设置</button>
+      <button id="applyBtn">应用设置</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html> 

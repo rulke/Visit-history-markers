@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>访问历史标记 - 设置</title>
+  <link rel="stylesheet" href="css/options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>访问历史标记 - 设置</h1>
+    </header>
+    
+    <section class="settings-card">
+      <h2>基本设置</h2>
+      <div class="option">
+        <label class="switch">
+          <input type="checkbox" id="autoEnable" checked>
+          <span class="slider round"></span>
+        </label>
+        <span class="option-text">启动浏览器时自动启用插件</span>
+      </div>
+      
+      <div class="option">
+        <label class="switch">
+          <input type="checkbox" id="showControlButton" checked>
+          <span class="slider round"></span>
+        </label>
+        <span class="option-text">显示右下角悬浮控制按钮</span>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <h2>隐私保护</h2>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="historyMode" value="all" checked>
+          <span>记住所有访问历史</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="historyMode" value="session">
+          <span>仅记录当前会话</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="historyMode" value="custom">
+          <span>自定义保留时间:</span>
+          <select id="customRetentionTime">
+            <option value="1">1天</option>
+            <option value="7" selected>1周</option>
+            <option value="30">1月</option>
+          </select>
+        </label>
+      </div>
+    </section>
+    
+    <section class="settings-card">
+      <h2>自动清理</h2>
+      <div class="option">
+        <label class="switch">
+          <input type="checkbox" id="autoClean">
+          <span class="slider round"></span>
+        </label>
+        <span class="option-text">自动清理访问记录</span>
+      </div>
+      
+      <div class="sub-option" id="cleanPeriodContainer">
+        <label>保留时间:</label>
+        <select id="cleanPeriod">
+          <option value="1">1天</option>
+          <option value="7" selected>1周</option>
+          <option value="30">1月</option>
+        </select>
+      </div>
+    </section>
+    
+    <section class="settings-card">
+      <h2>排除列表</h2>
+      <div class="exclude-list">
+        <p>不在这些网站上标记链接:</p>
+        <div class="exclude-list-container">
+          <div id="excludeList"></div>
+          <div class="add-site">
+            <input type="text" id="newExcludeSite" placeholder="输入网站域名，如: example.com">
+            <button id="addExcludeSite">+ 添加网站</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <section class="settings-card">
+      <h2>快捷键</h2>
+      <div class="shortcut-item">
+        <span>显示/隐藏所有标记:</span>
+        <span class="shortcut-key">Alt+H</span>
+      </div>
+      <div class="shortcut-item">
+        <span>手动添加标记:</span>
+        <span class="shortcut-key">Alt+J</span>
+      </div>
+      <button id="customShortcutBtn">自定义快捷键</button>
+    </section>
+    
+    <div class="button-group">
+      <button id="resetAllBtn" class="danger-btn">重置所有设置</button>
+      <button id="saveSettingsBtn" class="primary-btn">保存设置</button>
+    </div>
+  </div>
+  
+  <div id="message" class="message hidden"></div>
+  
+  <script src="options.js"></script>
+</body>
+</html> 
