@@ -35,7 +35,7 @@
 ## 安装方法
 
 ### 从Chrome网上应用店安装
-1. 访问[Chrome网上应用店](https://chrome.google.com/webstore)
+1. 访问[Chrome网上应用店](https://chrome.google.com/webstore)--未上架
 2. 搜索"访问历史标记"
 3. 点击"添加到Chrome"
 
