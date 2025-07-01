@@ -16,7 +16,8 @@
     },
     historyMode: 'all',
     customRetentionTime: 7,
-    excludeSites: []
+    excludeSites: [],
+    showControlButton: true  // 添加悬浮控制按钮设置
   };
   
   let visitedLinks = new Map(); // 存储访问过的链接及其访问时间
@@ -90,16 +91,23 @@
           // 监听DOM变化
           setupMutationObserver();
           
-          // 添加悬浮控制按钮
-          if (settings.showControlButton) {
-            addFloatingControlButton();
-          }
+          // 添加悬浮控制按钮（如果设置启用）
+          updateFloatButtonVisibility();
         });
       });
     });
     
     // 监听消息
     chrome.runtime.onMessage.addListener(handleMessages);
+    
+    // 1秒后再次检查悬浮按钮，确保即使在设置加载延迟的情况下也能正确显示
+    setTimeout(() => {
+      chrome.storage.sync.get({showControlButton: true}, function(result) {
+        if (result.showControlButton && !floatButton) {
+          addFloatingControlButton();
+        }
+      });
+    }, 1000);
   }
   
   // 检查当前站点是否在排除列表
@@ -324,8 +332,8 @@
         position: fixed;
         right: 20px;
         bottom: 20px;
-        width: 40px;
-        height: 40px;
+        width: 30px;
+        height: 30px;
         border-radius: 50%;
         background-color: white;
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
@@ -334,15 +342,55 @@
         justify-content: center;
         cursor: pointer;
         z-index: 9999;
-        font-size: 20px;
-        line-height: 1;
         user-select: none;
         opacity: 0.8;
-        transition: opacity 0.3s;
+        transition: opacity 0.3s, background-color 0.3s;
+      }
+      
+      #visited-links-float-button .button-icon {
+        font-size: 20px;
+        line-height: 1;
+        pointer-events: none; /* 防止图标自身接收点击事件 */
       }
       
       #visited-links-float-button:hover {
         opacity: 1;
+      }
+      
+      #visited-links-float-button.dragging {
+        opacity: 0.7;
+        background-color: #f0f0f0;
+        cursor: move;
+      }
+      
+      #visited-links-float-close {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        width: 16px;
+        height: 16px;
+        background-color: #ff5555;
+        color: white;
+        border-radius: 50%;
+        font-size: 12px;
+        line-height: 16px;
+        text-align: center;
+        cursor: pointer;
+        opacity: 0;
+        transform: scale(0.8);
+        transition: opacity 0.2s, transform 0.2s;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        z-index: 10000; /* 确保在按钮上层 */
+      }
+      
+      #visited-links-float-close:hover {
+        background-color: #ff3333;
+        transform: scale(1.1);
+      }
+      
+      #visited-links-float-button:hover #visited-links-float-close {
+        opacity: 1;
+        transform: scale(1);
       }
     `;
     
@@ -393,26 +441,199 @@
   function addFloatingControlButton() {
     if (floatButton) return; // 避免重复添加
     
+    // 创建按钮容器
     floatButton = document.createElement('div');
     floatButton.id = 'visited-links-float-button';
     floatButton.title = '点击显示/隐藏标记';
-    floatButton.innerHTML = '👁️';
-    floatButton.addEventListener('click', toggleVisibility);
     
+    // 添加主按钮图标（单独放置，防止被覆盖）
+    const buttonIcon = document.createElement('span');
+    buttonIcon.className = 'button-icon';
+    buttonIcon.textContent = isCurrentlyVisible ? '👁️' : '👁️‍🗨️';
+    floatButton.appendChild(buttonIcon);
+    
+    // 添加关闭按钮
+    const closeBtn = document.createElement('div');
+    closeBtn.id = 'visited-links-float-close';
+    closeBtn.innerHTML = '×';
+    closeBtn.title = '关闭悬浮按钮';
+    
+    // 保存事件处理函数引用，方便后续移除
+    const closeBtnClickHandler = function(e) {
+      e.stopPropagation(); // 防止触发按钮的点击事件
+      e.preventDefault(); // 阻止默认事件
+      
+      console.log("关闭按钮点击"); // 调试信息
+      
+      // 更新设置，禁用悬浮按钮
+      settings.showControlButton = false;
+      chrome.storage.sync.set({ showControlButton: false }, function() {
+        removeFloatingControlButton();
+      });
+      
+      // 返回false进一步阻止事件冒泡
+      return false;
+    };
+    
+    // 添加关闭按钮点击事件
+    closeBtn.addEventListener('click', closeBtnClickHandler);
+    
+    // 添加拖拽功能
+    let isDragging = false;
+    let offsetX, offsetY;
+    let startTime = 0;
+    let hasMoved = false; // 标记是否发生了拖拽移动
+    
+    // 创建鼠标事件处理函数
+    const mouseDownHandler = function(e) {
+      // 右键点击不触发拖拽
+      if (e.button !== 0) return;
+      
+      // 点击关闭按钮时不触发拖拽
+      if (e.target === closeBtn || e.target.closest('#visited-links-float-close')) {
+        console.log("点击了关闭按钮区域"); // 调试信息
+        return;
+      }
+      
+      isDragging = true;
+      hasMoved = false; // 重置移动标记
+      startTime = Date.now(); // 记录开始时间
+      offsetX = e.clientX - floatButton.getBoundingClientRect().left;
+      offsetY = e.clientY - floatButton.getBoundingClientRect().top;
+      floatButton.classList.add('dragging');
+      
+      // 防止文本选择
+      e.preventDefault();
+    };
+    
+    const mouseMoveHandler = function(e) {
+      if (!isDragging) return;
+      
+      // 只有移动足够距离才标记为移动
+      const moveThreshold = 3; // 像素
+      const deltaX = Math.abs(e.clientX - (floatButton.getBoundingClientRect().left + offsetX));
+      const deltaY = Math.abs(e.clientY - (floatButton.getBoundingClientRect().top + offsetY));
+      
+      if (deltaX > moveThreshold || deltaY > moveThreshold) {
+        hasMoved = true;
+      }
+      
+      const newLeft = e.clientX - offsetX;
+      const newTop = e.clientY - offsetY;
+      
+      // 确保按钮不会移出视口
+      const maxX = window.innerWidth - floatButton.offsetWidth;
+      const maxY = window.innerHeight - floatButton.offsetHeight;
+      
+      floatButton.style.left = Math.max(0, Math.min(newLeft, maxX)) + 'px';
+      floatButton.style.top = Math.max(0, Math.min(newTop, maxY)) + 'px';
+      floatButton.style.right = 'auto';
+      floatButton.style.bottom = 'auto';
+    };
+    
+    const mouseUpHandler = function(e) {
+      if (!isDragging) return;
+      
+      const clickDuration = Date.now() - startTime;
+      isDragging = false;
+      floatButton.classList.remove('dragging');
+      
+      // 如果拖拽移动了按钮，保存位置，并阻止触发点击事件
+      if (hasMoved) {
+        // 保存按钮位置到存储中
+        const position = {
+          left: floatButton.style.left,
+          top: floatButton.style.top
+        };
+        chrome.storage.local.set({ floatButtonPosition: position });
+        
+        console.log("拖拽结束，阻止点击事件"); // 调试信息
+        
+        // 阻止触发点击事件
+        e.stopPropagation();
+        return;
+      }
+      
+      // 如果是短时间内的点击（非拖拽），且点击的不是关闭按钮，则触发切换可见性
+      if (clickDuration < 300 && e.target !== closeBtn && !e.target.closest('#visited-links-float-close')) {
+        console.log("短时点击，切换可见性"); // 调试信息
+        toggleVisibility();
+      }
+    };
+    
+    // 添加事件监听器
+    floatButton.addEventListener('mousedown', mouseDownHandler);
+    document.addEventListener('mousemove', mouseMoveHandler);
+    document.addEventListener('mouseup', mouseUpHandler);
+    
+    // 存储事件处理函数，方便移除按钮时清理
+    floatButton.mouseDownHandler = mouseDownHandler;
+    floatButton.mouseMoveHandler = mouseMoveHandler;
+    floatButton.mouseUpHandler = mouseUpHandler;
+    closeBtn.clickHandler = closeBtnClickHandler;
+    
+    // 将关闭按钮添加到悬浮按钮中
+    floatButton.appendChild(closeBtn);
+    
+    // 添加到文档
     document.body.appendChild(floatButton);
+    
+    // 恢复保存的位置（如果有）
+    chrome.storage.local.get('floatButtonPosition', function(result) {
+      if (result.floatButtonPosition) {
+        floatButton.style.left = result.floatButtonPosition.left;
+        floatButton.style.top = result.floatButtonPosition.top;
+        floatButton.style.right = 'auto';
+        floatButton.style.bottom = 'auto';
+      }
+    });
   }
   
   // 移除悬浮控制按钮
   function removeFloatingControlButton() {
-    if (floatButton && floatButton.parentNode) {
-      floatButton.parentNode.removeChild(floatButton);
-      floatButton = null;
+    try {
+      if (floatButton) {
+        console.log("正在移除悬浮按钮"); // 调试信息
+        
+        // 移除所有事件监听器
+        if (floatButton.mouseDownHandler) {
+          floatButton.removeEventListener('mousedown', floatButton.mouseDownHandler);
+        }
+        
+        // 移除document上的全局事件监听器
+        if (floatButton.mouseMoveHandler) {
+          document.removeEventListener('mousemove', floatButton.mouseMoveHandler);
+        }
+        
+        if (floatButton.mouseUpHandler) {
+          document.removeEventListener('mouseup', floatButton.mouseUpHandler);
+        }
+        
+        // 移除关闭按钮的事件监听器
+        const closeBtn = document.getElementById('visited-links-float-close');
+        if (closeBtn && closeBtn.clickHandler) {
+          closeBtn.removeEventListener('click', closeBtn.clickHandler);
+        }
+        
+        // 从DOM中移除
+        if (floatButton.parentNode) {
+          floatButton.parentNode.removeChild(floatButton);
+        }
+        
+        floatButton = null;
+        console.log("悬浮按钮已移除"); // 调试信息
+      }
+    } catch (error) {
+      console.error("移除悬浮按钮时出错:", error);
     }
   }
   
   // 切换标记可见性
   function toggleVisibility() {
     isCurrentlyVisible = !isCurrentlyVisible;
+    
+    // 保存当前按钮引用，防止在处理过程中按钮被移除
+    const currentFloatButton = floatButton;
     
     const links = document.querySelectorAll('a[data-visited-marker]');
     links.forEach(link => {
@@ -424,9 +645,12 @@
     });
     
     // 更新按钮状态
-    if (floatButton) {
-      floatButton.innerHTML = isCurrentlyVisible ? '👁️' : '👁️‍🗨️';
-      floatButton.title = isCurrentlyVisible ? '点击隐藏标记' : '点击显示标记';
+    if (currentFloatButton && document.body.contains(currentFloatButton)) {
+      const buttonIcon = currentFloatButton.querySelector('.button-icon');
+      if (buttonIcon) {
+        buttonIcon.textContent = isCurrentlyVisible ? '👁️' : '👁️‍🗨️';
+      }
+      currentFloatButton.title = isCurrentlyVisible ? '点击隐藏标记' : '点击显示标记';
     }
     
     // 显示操作提示
@@ -465,12 +689,17 @@
         
       case 'applySettings':
         // 更新全局设置
+        const oldShowControlButton = settings.showControlButton;
         settings = {...settings, ...message.settings};
         
         // 更新UI
         addCustomStyles();
         updateVisibilityBasedOnSettings();
-        updateFloatButtonVisibility();
+        
+        // 检查悬浮按钮设置是否有变化并立即应用
+        if (oldShowControlButton !== settings.showControlButton) {
+          updateFloatButtonVisibility();
+        }
         break;
       
       case 'toggleVisibility':
@@ -562,7 +791,10 @@
       
       // 更新按钮状态
       if (floatButton) {
-        floatButton.innerHTML = isCurrentlyVisible ? '👁️' : '👁️‍🗨️';
+        const buttonIcon = floatButton.querySelector('.button-icon');
+        if (buttonIcon) {
+          buttonIcon.textContent = isCurrentlyVisible ? '👁️' : '👁️‍🗨️';
+        }
         floatButton.title = isCurrentlyVisible ? '点击隐藏标记' : '点击显示标记';
       }
     }

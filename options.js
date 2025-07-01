@@ -35,40 +35,40 @@ document.addEventListener('DOMContentLoaded', function() {
   // 加载保存的设置
   loadSettings();
   
+  // 加载快捷键设置
+  loadShortcutSettings();
+  
   // 绑定事件处理程序
   autoCleanCheckbox.addEventListener('change', toggleAutoClean);
+  showControlButtonCheckbox.addEventListener('change', toggleControlButton);
   addExcludeSiteButton.addEventListener('click', addExcludeSite);
   customShortcutButton.addEventListener('click', openShortcutPage);
   resetAllButton.addEventListener('click', confirmResetAllSettings);
   saveSettingsButton.addEventListener('click', saveSettings);
   
-  // 功能实现
-  function loadSettings() {
-    chrome.storage.sync.get(defaultSettings, function(settings) {
-      // 基本设置
-      autoEnableCheckbox.checked = settings.autoEnable;
-      showControlButtonCheckbox.checked = settings.showControlButton;
-      
-      // 隐私保护设置
-      for (let radio of historyModeRadios) {
-        radio.checked = (radio.value === settings.historyMode);
-      }
-      customRetentionTimeSelect.value = settings.customRetentionTime;
-      customRetentionTimeSelect.disabled = settings.historyMode !== 'custom';
-      
-      // 自动清理设置
-      autoCleanCheckbox.checked = settings.autoClean;
-      cleanPeriodSelect.value = settings.cleanPeriod;
-      toggleAutoClean();
-      
-      // 排除列表
-      renderExcludeList(settings.excludeSites);
-    });
-  }
-  
   // 切换自动清理显示
   function toggleAutoClean() {
     cleanPeriodContainer.style.display = autoCleanCheckbox.checked ? 'flex' : 'none';
+  }
+  
+  // 切换控制按钮显示
+  function toggleControlButton() {
+    const showControlButton = showControlButtonCheckbox.checked;
+    chrome.storage.sync.set({ showControlButton: showControlButton }, function() {
+      // 通知所有内容脚本更新控制按钮显示
+      chrome.tabs.query({}, function(tabs) {
+        tabs.forEach(tab => {
+          if (tab.url && tab.url.startsWith('http')) {
+            chrome.tabs.sendMessage(tab.id, { 
+              type: 'applySettings', 
+              settings: { showControlButton: showControlButton }
+            }).catch(() => {
+              // 忽略错误，部分标签页可能不包含内容脚本
+            });
+          }
+        });
+      });
+    });
   }
   
   // 渲染排除列表
@@ -146,6 +146,33 @@ document.addEventListener('DOMContentLoaded', function() {
   // 打开快捷键设置页面
   function openShortcutPage() {
     chrome.tabs.create({url: 'chrome://extensions/shortcuts'});
+    
+    // 添加事件监听，当用户返回到设置页面时刷新快捷键显示
+    chrome.tabs.onActivated.addListener(function tabActivatedListener(activeInfo) {
+      chrome.tabs.get(activeInfo.tabId, function(tab) {
+        if (tab.url.includes('chrome-extension://') && tab.url.includes('options.html')) {
+          // 重新加载快捷键设置
+          loadShortcutSettings();
+          // 移除监听器，避免重复触发
+          chrome.tabs.onActivated.removeListener(tabActivatedListener);
+        }
+      });
+    });
+  }
+  
+  // 加载快捷键设置
+  function loadShortcutSettings() {
+    chrome.commands.getAll(function(commands) {
+      commands.forEach(function(command) {
+        if (command.name === 'toggle-marks') {
+          document.getElementById('toggle-marks-shortcut').textContent = 
+            command.shortcut || '未设置';
+        } else if (command.name === 'add-mark') {
+          document.getElementById('add-mark-shortcut').textContent = 
+            command.shortcut || '未设置';
+        }
+      });
+    });
   }
   
   // 确认重置所有设置
@@ -218,4 +245,29 @@ document.addEventListener('DOMContentLoaded', function() {
       customRetentionTimeSelect.disabled = event.target.value !== 'custom';
     });
   }
+  
+  // 加载设置
+  function loadSettings() {
+    chrome.storage.sync.get(defaultSettings, function(settings) {
+      // 基本设置
+      autoEnableCheckbox.checked = settings.autoEnable;
+      showControlButtonCheckbox.checked = settings.showControlButton;
+      
+      // 隐私保护设置
+      for (let radio of historyModeRadios) {
+        radio.checked = (radio.value === settings.historyMode);
+      }
+      customRetentionTimeSelect.value = settings.customRetentionTime;
+      customRetentionTimeSelect.disabled = settings.historyMode !== 'custom';
+      
+      // 自动清理设置
+      autoCleanCheckbox.checked = settings.autoClean;
+      cleanPeriodSelect.value = settings.cleanPeriod;
+      toggleAutoClean();
+      
+      // 排除列表
+      renderExcludeList(settings.excludeSites);
+    });
+  }
+  
 }); 

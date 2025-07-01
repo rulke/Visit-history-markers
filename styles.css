@@ -70,4 +70,29 @@ a[data-visited-marker].override-styles {
   outline-offset: 2px !important;
   background-color: rgba(76, 175, 80, 0.1) !important;
   transition: all 0.2s ease !important;
+}
+
+/* 悬浮控制按钮样式 */
+#visited-links-float-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  background-color: #ffffff;
+  border: 2px solid #3498db;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  transition: all 0.3s ease;
+}
+
+#visited-links-float-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
 } 

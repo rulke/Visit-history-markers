@@ -32,9 +32,47 @@ function initializeExtension() {
     // 创建右键菜单
     createContextMenus();
     
-    // 如果设置了自动启用，则在浏览器启动时启用插件
-    if (settings.autoEnable && settings.enabled === false) {
-      chrome.storage.sync.set({ enabled: true });
+    // 修正自动启用逻辑
+    // 修正: 彻底改变思路，当autoEnable为false时，我们需要确保插件的enabled属性是false
+    // 当autoEnable为true时，我们需要确保插件的enabled属性是true
+    if (settings.autoEnable === false) {
+      // 如果关闭了自动启用，确保插件处于禁用状态
+      chrome.storage.sync.set({ enabled: false }, function() {
+        console.log('自动启用关闭，插件已禁用');
+        
+        // 通知所有内容脚本更新状态
+        chrome.tabs.query({}, function(tabs) {
+          tabs.forEach(tab => {
+            if (tab.url && tab.url.startsWith('http')) {
+              chrome.tabs.sendMessage(tab.id, { 
+                type: 'toggleExtension', 
+                enabled: false 
+              }).catch(() => {
+                // 忽略错误，部分标签页可能不包含内容脚本
+              });
+            }
+          });
+        });
+      });
+    } else if (settings.autoEnable === true) {
+      // 如果开启了自动启用，确保插件处于启用状态
+      chrome.storage.sync.set({ enabled: true }, function() {
+        console.log('自动启用开启，插件已启用');
+        
+        // 通知所有内容脚本更新状态
+        chrome.tabs.query({}, function(tabs) {
+          tabs.forEach(tab => {
+            if (tab.url && tab.url.startsWith('http')) {
+              chrome.tabs.sendMessage(tab.id, { 
+                type: 'toggleExtension', 
+                enabled: true 
+              }).catch(() => {
+                // 忽略错误，部分标签页可能不包含内容脚本
+              });
+            }
+          });
+        });
+      });
     }
   });
   
